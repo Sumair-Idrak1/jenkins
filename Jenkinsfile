@@ -23,7 +23,8 @@ pipeline {
                 sh """
                     mkdir -p ${LOCAL_DIR}
                     rm -rf ${LOCAL_DIR}/*
-                    cp -r * ${LOCAL_DIR}/
+                    # Copy all files except the frontend folder itself
+                    find . -maxdepth 1 ! -name '.' ! -name 'frontend' -exec cp -r {} ${LOCAL_DIR}/ \\;
                     echo "✅ Build folder prepared at ${LOCAL_DIR}"
                 """
             }

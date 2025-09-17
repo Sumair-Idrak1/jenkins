@@ -1,11 +1,12 @@
 pipeline {
     agent any
+
     environment {
         IMAGE_NAME = 'simple-frontend'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FULL_IMAGE_NAME = "sumairjaved/${IMAGE_NAME}"
         GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD || echo 'unknown'", returnStdout: true).trim()
-        LOCAL_DIR = '/home/idrak/Desktop/frontend' // Path where code lives and will be built
+        LOCAL_DIR = "${WORKSPACE}/frontend" // Safe writable directory inside Jenkins workspace
     }
 
     stages {
@@ -17,13 +18,13 @@ pipeline {
             }
         }
 
-        stage('Prepare Local Build Folder') {
+        stage('Prepare Build Folder') {
             steps {
                 sh """
                     mkdir -p ${LOCAL_DIR}
                     rm -rf ${LOCAL_DIR}/*
                     cp -r * ${LOCAL_DIR}/
-                    echo "✅ Local build folder prepared at ${LOCAL_DIR}"
+                    echo "✅ Build folder prepared at ${LOCAL_DIR}"
                 """
             }
         }
@@ -51,7 +52,7 @@ pipeline {
             }
         }
 
-        stage('Optional: Push to Docker Hub') {
+        stage('Optional: Push Docker Hub') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
@@ -71,10 +72,10 @@ pipeline {
 
     post {
         always {
-            echo "🧹 Local cleanup can be done here if needed"
+            echo "🧹 Cleanup if needed"
         }
         success {
-            echo "🎉 Pipeline completed successfully on localhost!"
+            echo "🎉 Pipeline completed successfully in workspace!"
         }
         failure {
             echo "❌ Pipeline failed!"

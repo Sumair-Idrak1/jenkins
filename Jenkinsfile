@@ -2,6 +2,7 @@ pipeline {
     agent any
     
     environment {
+	DOCKER_HOST = "tcp://localhost:2375"
         DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')  
         DOCKERHUB_USER = 'sumairjaved'
         IMAGE_NAME = 'simple-frontend'

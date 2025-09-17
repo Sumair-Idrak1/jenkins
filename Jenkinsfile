@@ -1,6 +1,5 @@
 pipeline {
     agent any
-
     environment {
         IMAGE_NAME = 'simple-frontend'
         IMAGE_TAG = "${env.BUILD_NUMBER}"

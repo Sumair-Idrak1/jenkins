@@ -45,6 +45,11 @@ spec:
       limits:
         memory: "256Mi"
         cpu: "200m"
+  - name: helm
+    image: alpine/helm:3.12.1
+    command:
+    - cat
+    tty: true
   volumes:
   - name: kaniko-cache
     emptyDir: {}
@@ -53,13 +58,17 @@ spec:
 """
         }
     }
+
     environment {
         IMAGE_NAME = 'simple-frontend'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FULL_IMAGE_NAME = "sumairjaved/${IMAGE_NAME}"
         LOCAL_DIR = "${WORKSPACE}/frontend"
+        DEPLOY_DIR = "/projects/deployedfrontend"
     }
+
     stages {
+
         stage('Checkout') {
             steps {
                 container('git') {
@@ -70,6 +79,7 @@ spec:
                 }
             }
         }
+
         stage('Prepare Build Context') {
             steps {
                 container('kaniko') {
@@ -77,7 +87,6 @@ spec:
                         mkdir -p ${LOCAL_DIR}
                         rm -rf ${LOCAL_DIR}/*
                         find . -maxdepth 1 ! -name '.' ! -name 'frontend' ! -name '.git' -exec cp -r {} ${LOCAL_DIR}/ \\;
-                        
                         echo "📁 Build context contents:"
                         ls -la ${LOCAL_DIR}/
                         echo "✅ Build context ready at ${LOCAL_DIR}"
@@ -85,17 +94,14 @@ spec:
                 }
             }
         }
+
         stage('Build and Push with Kaniko') {
             steps {
                 container('kaniko') {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh '''
-                            # Create Docker config for authentication
                             echo "🔐 Configuring Docker registry authentication..."
-                            
-                            # Create auth string safely
                             AUTH_STRING=$(echo -n "$DOCKER_USER:$DOCKER_PASS" | base64 -w 0)
-                            
                             cat > /kaniko/.docker/config.json << EOF
 {
     "auths": {
@@ -105,11 +111,7 @@ spec:
     }
 }
 EOF
-                            
-                            echo "🏗️  Building and pushing image with Kaniko..."
-                        '''
-                        
-                        sh '''
+                            echo "🏗️ Building and pushing image with Kaniko..."
                             /kaniko/executor \
                                 --dockerfile=${LOCAL_DIR}/Dockerfile \
                                 --context=dir://${LOCAL_DIR} \
@@ -123,16 +125,29 @@ EOF
                                 --log-timestamp \
                                 --verbosity=info \
                                 --force
-                            
-                            echo "✅ Images successfully built and pushed:"
-                            echo "   📦 ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
-                            echo "   📦 ${FULL_IMAGE_NAME}:latest"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy with Helm') {
+            steps {
+                container('helm') {
+                    dir("${DEPLOY_DIR}") {
+                        sh '''
+                            echo "🚀 Deploying frontend with Helm..."
+                            helm uninstall simple-frontend -n frontend || true
+                            helm install simple-frontend ./ -n frontend --create-namespace \
+                                --set image.repository=${FULL_IMAGE_NAME} \
+                                --set image.tag=${IMAGE_TAG}
                         '''
                     }
                 }
             }
         }
     }
+
     post {
         always {
             echo "🧹 Pipeline finished"

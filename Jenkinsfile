@@ -1,13 +1,12 @@
 pipeline {
     agent any
-
     environment {
         IMAGE_NAME = 'simple-frontend'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FULL_IMAGE_NAME = "sumairjaved/${IMAGE_NAME}"
         LOCAL_DIR = "${WORKSPACE}/frontend"
+        KANIKO_CACHE = "/kaniko-cache"
     }
-
     stages {
         stage('Checkout') {
             steps {
@@ -17,7 +16,6 @@ pipeline {
                           userRemoteConfigs: [[url: 'https://github.com/Sumair-Idrak1/jenkins.git']]])
             }
         }
-
         stage('Prepare Build Folder') {
             steps {
                 sh """
@@ -28,39 +26,66 @@ pipeline {
                 """
             }
         }
-
-        stage('Build Docker Image') {
+        stage('Build and Push with Kaniko') {
             steps {
-                sh """
-                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest ${LOCAL_DIR}
-                    echo "✅ Docker image built locally"
-                """
-            }
+                script {
+                    // Create Docker config for authentication
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh """
+                            # Create Docker config directory
+                            mkdir -p /kaniko/.docker
+                            
+                            # Create Docker config.json for authentication
+                            cat > /kaniko/.docker/config.json << EOF
+{
+    "auths": {
+        "https://index.docker.io/v1/": {
+            "auth": "\$(echo -n "${DOCKER_USER}:${DOCKER_PASS}" | base64)"
         }
-
-        stage('Push to Docker Hub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${FULL_IMAGE_NAME}:${IMAGE_TAG}
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${FULL_IMAGE_NAME}:latest
-                        docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${FULL_IMAGE_NAME}:latest
-                        docker logout
-                        echo "✅ Docker image pushed to Docker Hub"
-                    """
+    }
+}
+EOF
+                            
+                            echo "✅ Docker credentials configured for Kaniko"
+                        """
+                        
+                        // Run Kaniko to build and push
+                        sh """
+                            # Use Kaniko executor to build and push image
+                            /kaniko/executor \\
+                                --dockerfile=${LOCAL_DIR}/Dockerfile \\
+                                --context=${LOCAL_DIR} \\
+                                --destination=${FULL_IMAGE_NAME}:${IMAGE_TAG} \\
+                                --destination=${FULL_IMAGE_NAME}:latest \\
+                                --cache=true \\
+                                --cache-dir=${KANIKO_CACHE} \\
+                                --compressed-caching=false \\
+                                --snapshot-mode=redo \\
+                                --use-new-run \\
+                                --log-timestamp \\
+                                --verbosity=info
+                            
+                            echo "✅ Docker image built and pushed with Kaniko"
+                        """
+                    }
                 }
             }
         }
     }
-
     post {
         always {
             echo "🧹 Pipeline finished"
+            // Clean up sensitive files
+            sh """
+                rm -rf /kaniko/.docker/config.json 2>/dev/null || true
+                echo "🧹 Cleaned up Docker credentials"
+            """
         }
         success {
             echo "🎉 Pipeline completed successfully!"
+            echo "📦 Images pushed:"
+            echo "   - ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
+            echo "   - ${FULL_IMAGE_NAME}:latest"
         }
         failure {
             echo "❌ Pipeline failed!"

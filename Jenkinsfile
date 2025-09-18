@@ -64,7 +64,7 @@ spec:
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FULL_IMAGE_NAME = "sumairjaved/${IMAGE_NAME}"
         LOCAL_DIR = "${WORKSPACE}/frontend"
-        DEPLOY_DIR = "/projects/deployedfrontend"
+        DEPLOY_DIR = "/home/idrak/Desktop/projects/deployedfrontend"
     }
 
     stages {

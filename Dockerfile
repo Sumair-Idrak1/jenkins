@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . /app
 
 # Expose port
-EXPOSE 8080
+EXPOSE 5000
 
 # Run simple HTTP server
-CMD ["python", "-m", "http.server", "8080"]
+CMD ["python", "-m", "http.server", "5000", "--bind", "0.0.0.0"]
